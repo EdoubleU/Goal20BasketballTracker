@@ -4,36 +4,22 @@
   <meta charset="UTF-8" />
   <title>Goal 20: Basketball Impact Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      margin: 0;
-    }
-
-    h1, h2 {
-      margin-top: 20px;
-      font-size: 1.5em;
-    }
-
+    * { box-sizing: border-box; }
+    body { font-family: sans-serif; padding: 20px; margin: 0; }
+    h1, h2 { margin-top: 20px; font-size: 1.5em; }
     label, input, select, button {
       margin: 5px 0;
       display: block;
       width: 100%;
       max-width: 100%;
     }
-
-    input[type="number"],
-    input[type="text"] {
+    input[type="number"], input[type="text"] {
       padding: 8px;
       font-size: 1em;
       width: 100%;
     }
-
     button {
       padding: 10px;
       font-size: 1em;
@@ -41,70 +27,44 @@
       margin-top: 10px;
       cursor: pointer;
     }
-
     .controls {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       margin: 20px 0;
     }
-
-    .controls button,
-    .controls input[type="file"] {
+    .controls button, .controls input[type="file"] {
       flex: 1 1 45%;
       min-width: 120px;
     }
-
-    .hidden {
-      display: none;
-    }
-
-    .leaderboard-table {
-      margin-bottom: 40px;
-      width: 100%;
-      overflow-x: auto;
-    }
-
-    .table-container {
-      overflow-x: auto;
-      width: 100%;
-    }
-
+    .hidden { display: none; }
+    .leaderboard-table { margin-bottom: 40px; width: 100%; overflow-x: auto; }
+    .table-container { overflow-x: auto; width: 100%; }
     table {
       border-collapse: collapse;
       width: 100%;
       min-width: 800px;
     }
-
     th, td {
       border: 1px solid #ccc;
       padding: 8px;
       text-align: center;
       font-size: 0.9em;
     }
-
+    canvas {
+      max-width: 100%;
+      margin-top: 20px;
+    }
     @media (max-width: 768px) {
       table {
         display: block;
         overflow-x: auto;
         white-space: nowrap;
       }
-
-      .controls {
-        flex-direction: column;
-      }
-
-      th, td {
-        padding: 6px;
-      }
-
-      h1 {
-        font-size: 1.25em;
-      }
-
-      h2 {
-        font-size: 1.1em;
-      }
+      .controls { flex-direction: column; }
+      th, td { padding: 6px; }
+      h1 { font-size: 1.25em; }
+      h2 { font-size: 1.1em; }
     }
   </style>
 </head>
@@ -137,23 +97,20 @@
 let NUM_GAMES = 10;
 let players = [];
 let data = {};
-let renderTimeout;
+let charts = {};
 
 function generatePlayerInputs() {
   const num = parseInt(document.getElementById('numPlayers').value);
   NUM_GAMES = parseInt(document.getElementById('numGames').value);
   const container = document.getElementById('playerInputs');
   container.innerHTML = "";
-
   for (let i = 1; i <= num; i++) {
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = `Player ${i} Name`;
     input.id = `player${i}`;
     container.appendChild(input);
-    container.appendChild(document.createElement("br"));
   }
-
   document.getElementById("startBtn").classList.remove("hidden");
 }
 
@@ -163,7 +120,6 @@ function startTracker() {
     const name = document.getElementById(`player${i}`).value.trim();
     if (name) players.push(name);
   }
-
   initializeData();
   document.getElementById('setup').classList.add('hidden');
   document.getElementById('tracker').classList.remove('hidden');
@@ -196,7 +152,7 @@ function renderTracker() {
 
   // Leaderboard
   const leaderboard = document.createElement("div");
-  leaderboard.innerHTML = `<h2>🏆 Leaderboard (Impact per Minute)</h2>`;
+  leaderboard.innerHTML = `<h2> Leaderboard (Impact per Minute)</h2>`;
   const lbTable = document.createElement("table");
   lbTable.classList.add("leaderboard-table");
   lbTable.innerHTML = `
@@ -239,63 +195,108 @@ function renderTracker() {
     `;
     table.appendChild(header);
 
-    let totalImpact = 0, totalMinutes = 0;
+    const summary = document.createElement("p");
+    summary.id = `summary-${player}`;
 
     data[player].games.forEach((game, i) => {
       const row = document.createElement("tr");
       row.innerHTML = `<td>${i + 1}</td>`;
       const cells = [];
 
-      const oppInput = createTextInput(game.opponent, val => game.opponent = val);
+      const oppInput = createTextInput(game.opponent, val => {
+        game.opponent = val;
+        updateSummaryAndChart(player);
+      });
       cells.push(wrapCell(oppInput));
+
+      ['minutes', 'points', 'assists', 'rebounds', 'steals', 'blocks', 'charges', 'tippedPasses', 'energizers'].forEach(stat => {
+        const input = createNumberInput(game[stat], val => {
+          game[stat] = parseFloat(val) || 0;
+          updateSummaryAndChart(player);
+        });
+        cells.push(wrapCell(input));
+      });
 
       const impactCell = document.createElement("td");
       const ipmCell = document.createElement("td");
+      impactCell.textContent = calculateImpact(game).toFixed(2);
+      ipmCell.textContent = game.minutes ? (calculateImpact(game) / game.minutes).toFixed(2) : "0.00";
 
-      function updateRowImpact() {
-        const impact = calculateImpact(game);
-        const ipm = game.minutes ? (impact / game.minutes).toFixed(2) : "0.00";
-        impactCell.textContent = impact.toFixed(2);
-        ipmCell.textContent = ipm;
-        scheduleLeaderboardUpdate();
-      }
-
-      ['minutes', 'points', 'assists', 'rebounds', 'steals', 'blocks', 'charges', 'tippedPasses', 'energizers']
-        .forEach(stat => {
-          const input = createNumberInput(game[stat], val => {
-            game[stat] = parseFloat(val) || 0;
-            updateRowImpact();
+      cells.forEach((cell, idx) => {
+        const input = cell.querySelector("input");
+        if (input) {
+          input.addEventListener("input", () => {
+            // Update impact values for this row
+            const impact = calculateImpact(game);
+            const ipm = game.minutes ? (impact / game.minutes).toFixed(2) : "0.00";
+            impactCell.textContent = impact.toFixed(2);
+            ipmCell.textContent = ipm;
+            // Update summary + chart + leaderboard
+            updateSummaryAndChart(player);
           });
-          cells.push(wrapCell(input));
-        });
-
-      updateRowImpact();
+        }
+      });
 
       row.append(...cells, impactCell, ipmCell);
       table.appendChild(row);
 
-      totalImpact += calculateImpact(game);
-      totalMinutes += game.minutes;
     });
-
-    const summary = document.createElement("p");
-    const perMinute = totalMinutes ? (totalImpact / totalMinutes).toFixed(2) : "0.00";
-    summary.textContent = `Total Impact: ${totalImpact.toFixed(2)} | Minutes: ${totalMinutes} | Impact/Min: ${perMinute}`;
 
     wrapper.appendChild(table);
     section.appendChild(wrapper);
     section.appendChild(summary);
+
+    const canvas = document.createElement("canvas");
+    canvas.id = `chart-${player}`;
+    section.appendChild(canvas);
+
     tracker.appendChild(section);
+    updateSummaryAndChart(player);
+  });
+}
+
+function updateSummaryAndChart(player) {
+  const games = data[player].games;
+  let totalImpact = 0, totalMinutes = 0;
+  const impacts = [];
+
+  games.forEach(g => {
+    const impact = calculateImpact(g);
+    totalImpact += impact;
+    totalMinutes += g.minutes;
+    impacts.push(impact.toFixed(2));
+  });
+
+  const summary = document.getElementById(`summary-${player}`);
+  const ipm = totalMinutes ? (totalImpact / totalMinutes).toFixed(2) : "0.00";
+  summary.textContent = `Total Impact: ${totalImpact.toFixed(2)} | Minutes: ${totalMinutes} | Impact/Min: ${ipm}`;
+  renderLeaderboardOnly();
+
+  const ctx = document.getElementById(`chart-${player}`).getContext('2d');
+  if (charts[player]) charts[player].destroy();
+  charts[player] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: games.map((_, i) => `Game ${i + 1}`),
+      datasets: [{
+        label: 'Impact',
+        data: impacts,
+        backgroundColor: 'rgba(54, 162, 235, 0.6)'
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
   });
 }
 
 function renderLeaderboardOnly() {
   const leaderboard = document.querySelector(".leaderboard-table");
   if (!leaderboard) return;
-
-  while (leaderboard.rows.length > 1) {
-    leaderboard.deleteRow(1);
-  }
+  while (leaderboard.rows.length > 1) leaderboard.deleteRow(1);
 
   const ranked = players.map(name => {
     const games = data[name].games;
@@ -318,43 +319,6 @@ function renderLeaderboardOnly() {
   });
 }
 
-function scheduleLeaderboardUpdate() {
-  clearTimeout(renderTimeout);
-  renderTimeout = setTimeout(() => {
-    renderLeaderboardOnly();
-  }, 500);
-}
-
-function createNumberInput(value, onChange) {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.value = value;
-
-  input.addEventListener("input", () => {
-    onChange(input.value);
-  });
-
-  return input;
-}
-
-function createTextInput(value, onChange) {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = value;
-
-  input.addEventListener("input", () => {
-    onChange(input.value);
-  });
-
-  return input;
-}
-
-function wrapCell(el) {
-  const td = document.createElement("td");
-  td.appendChild(el);
-  return td;
-}
-
 function calculateImpact(g) {
   return (
     g.points * 1 +
@@ -368,6 +332,29 @@ function calculateImpact(g) {
   );
 }
 
+function wrapCell(el) {
+  const td = document.createElement("td");
+  td.appendChild(el);
+  return td;
+}
+
+function createNumberInput(value, onChange) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.value = value;
+  input.addEventListener("input", () => onChange(input.value));
+  return input;
+}
+
+function createTextInput(value, onChange) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.addEventListener("input", () => onChange(input.value));
+  return input;
+}
+
+// Saving, loading, importing/exporting...
 function saveToLocalStorage() {
   const saved = { NUM_GAMES, players, data };
   localStorage.setItem("basketballImpactData", JSON.stringify(saved));
@@ -429,9 +416,6 @@ function downloadFile(content, filename, mime) {
   link.click();
 }
 </script>
-
-</body>
-</html>
 
 </body>
 </html>
