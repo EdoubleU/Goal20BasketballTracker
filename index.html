@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Basketball Impact Tracker</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    h2 { margin-top: 30px; }
+    label, input, select, button { margin: 5px 0; display: block; }
+    table { border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; }
+    input[type="number"] { width: 60px; }
+    .hidden { display: none; }
+    .controls { margin: 20px 0; }
+    .leaderboard-table { margin-bottom: 40px; }
+  </style>
+</head>
+<body>
+
+<h1>🏀 Basketball Impact Tracker</h1>
+
+<!-- Setup -->
+<div id="setup">
+  <label>Number of Players: <input type="number" id="numPlayers" min="1" value="5"></label>
+  <label>Number of Games: <input type="number" id="numGames" min="1" value="10"></label>
+  <button onclick="generatePlayerInputs()">Next</button>
+
+  <div id="playerInputs"></div>
+  <button id="startBtn" class="hidden" onclick="startTracker()">Start Tracker</button>
+</div>
+
+<!-- Tracker -->
+<div id="tracker" class="hidden">
+  <div class="controls">
+    <button onclick="saveToLocalStorage()">💾 Save</button>
+    <button onclick="loadFromLocalStorage()">📅 Load</button>
+    <button onclick="exportCSV()">📄 Export CSV</button>
+    <button onclick="exportJSON()">📄 Export JSON</button>
+    <input type="file" id="importJson" accept=".json" onchange="importJSON(event)">
+  </div>
+  <div id="trackerContent"></div>
+</div>
+
+<script>
+let NUM_GAMES = 10;
+let players = [];
+let data = {};
+
+function generatePlayerInputs() {
+  const num = parseInt(document.getElementById('numPlayers').value);
+  NUM_GAMES = parseInt(document.getElementById('numGames').value);
+  const container = document.getElementById('playerInputs');
+  container.innerHTML = "";
+
+  for (let i = 1; i <= num; i++) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = `Player ${i} Name`;
+    input.id = `player${i}`;
+    container.appendChild(input);
+    container.appendChild(document.createElement("br"));
+  }
+
+  document.getElementById("startBtn").classList.remove("hidden");
+}
+
+function startTracker() {
+  players = [];
+  for (let i = 1; i <= parseInt(document.getElementById('numPlayers').value); i++) {
+    const name = document.getElementById(`player${i}`).value.trim();
+    if (name) players.push(name);
+  }
+
+  initializeData();
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('tracker').classList.remove('hidden');
+  renderTracker();
+}
+
+function initializeData() {
+  data = {};
+  players.forEach(name => {
+    data[name] = {
+      games: Array(NUM_GAMES).fill(null).map(() => ({
+        opponent: '',
+        minutes: 0,
+        points: 0,
+        assists: 0,
+        rebounds: 0,
+        steals: 0,
+        blocks: 0,
+        charges: 0,
+        tippedPasses: 0,
+        energizers: 0
+      }))
+    };
+  });
+}
+
+function renderTracker() {
+  const tracker = document.getElementById("trackerContent");
+  tracker.innerHTML = "";
+
+  // --- Leaderboard ---
+  const leaderboard = document.createElement("div");
+  leaderboard.innerHTML = `<h2>🏆 Leaderboard (Impact per Minute)</h2>`;
+  const lbTable = document.createElement("table");
+  lbTable.classList.add("leaderboard-table");
+
+  lbTable.innerHTML = `
+    <tr>
+      <th>Rank</th>
+      <th>Player</th>
+      <th>Total Impact</th>
+      <th>Total Minutes</th>
+      <th>Impact/Min</th>
+    </tr>
+  `;
+
+  const ranked = players.map(name => {
+    const games = data[name].games;
+    const totalImpact = games.reduce((sum, g) => sum + calculateImpact(g), 0);
+    const totalMinutes = games.reduce((sum, g) => sum + (g.minutes || 0), 0);
+    const ipm = totalMinutes ? (totalImpact / totalMinutes).toFixed(2) : "0.00";
+    return { name, totalImpact, totalMinutes, ipm: parseFloat(ipm) };
+  }).sort((a, b) => b.ipm - a.ipm);
+
+  ranked.forEach((player, i) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</td>
+      <td>${player.name}</td>
+      <td>${player.totalImpact.toFixed(2)}</td>
+      <td>${player.totalMinutes}</td>
+      <td>${player.ipm.toFixed(2)}</td>
+    `;
+    lbTable.appendChild(row);
+  });
+
+  leaderboard.appendChild(lbTable);
+  tracker.appendChild(leaderboard);
+
+  // --- Individual Player Sections ---
+  players.forEach(player => {
+    const section = document.createElement("div");
+    section.innerHTML = `<h2>${player}</h2>`;
+
+    const table = document.createElement("table");
+    const header = document.createElement("tr");
+    header.innerHTML = `
+      <th>Game</th>
+      <th>Opponent</th>
+      <th>Min</th>
+      <th>Pts</th>
+      <th>Ast</th>
+      <th>Reb</th>
+      <th>Stl</th>
+      <th>Blk</th>
+      <th>Chg</th>
+      <th>Tips</th>
+      <th>Energ</th>
+      <th>Impact</th>
+      <th>Impact/Min</th>
+    `;
+    table.appendChild(header);
+
+    let totalImpact = 0, totalMinutes = 0;
+
+    data[player].games.forEach((game, i) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${i + 1}</td>`;
+      const cells = [];
+
+      const oppInput = createTextInput(game.opponent, val => game.opponent = val);
+      cells.push(wrapCell(oppInput));
+
+      ['minutes', 'points', 'assists', 'rebounds', 'steals', 'blocks', 'charges', 'tippedPasses', 'energizers']
+        .forEach(stat => {
+          const input = createNumberInput(game[stat], val => {
+            game[stat] = parseFloat(val) || 0;
+            renderTracker();
+          });
+          cells.push(wrapCell(input));
+        });
+
+      const impact = calculateImpact(game);
+      const ipm = game.minutes ? (impact / game.minutes).toFixed(2) : "0.00";
+
+      totalImpact += impact;
+      totalMinutes += game.minutes;
+
+      const impactCell = document.createElement("td");
+      impactCell.textContent = impact.toFixed(2);
+
+      const ipmCell = document.createElement("td");
+      ipmCell.textContent = ipm;
+
+      row.append(...cells, impactCell, ipmCell);
+      table.appendChild(row);
+    });
+
+    const summary = document.createElement("p");
+    const perMinute = totalMinutes ? (totalImpact / totalMinutes).toFixed(2) : "0.00";
+    summary.textContent = `Total Impact: ${totalImpact.toFixed(2)} | Minutes: ${totalMinutes} | Impact/Min: ${perMinute}`;
+
+    section.appendChild(table);
+    section.appendChild(summary);
+    tracker.appendChild(section);
+  });
+}
+
+function calculateImpact(g) {
+  return (
+    g.points * 1 +
+    g.assists * 2.3 +
+    g.rebounds * 1 +
+    g.steals * 1.5 +
+    g.blocks * 1 +
+    g.charges * 1.5 +
+    g.tippedPasses * 0.5 +
+    g.energizers * 2
+  );
+}
+
+function createNumberInput(value, onChange) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.value = value;
+  input.oninput = () => onChange(input.value);
+  return input;
+}
+
+function createTextInput(value, onChange) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+  input.oninput = () => onChange(input.value);
+  return input;
+}
+
+function wrapCell(el) {
+  const td = document.createElement("td");
+  td.appendChild(el);
+  return td;
+}
+
+function saveToLocalStorage() {
+  const saved = { NUM_GAMES, players, data };
+  localStorage.setItem("basketballImpactData", JSON.stringify(saved));
+  alert("Saved!");
+}
+
+function loadFromLocalStorage() {
+  const raw = localStorage.getItem("basketballImpactData");
+  if (raw) {
+    const loaded = JSON.parse(raw);
+    NUM_GAMES = loaded.NUM_GAMES;
+    players = loaded.players;
+    data = loaded.data;
+    document.getElementById('setup').classList.add('hidden');
+    document.getElementById('tracker').classList.remove('hidden');
+    renderTracker();
+  } else {
+    alert("No saved data found.");
+  }
+}
+
+function exportCSV() {
+  let csv = "Player,Opponent,Minutes,Points,Assists,Rebounds,Steals,Blocks,Charges,Tipped Passes,Energizers,Impact\n";
+  players.forEach(player => {
+    data[player].games.forEach(game => {
+      csv += `${player},${game.opponent},${game.minutes},${game.points},${game.assists},${game.rebounds},${game.steals},${game.blocks},${game.charges},${game.tippedPasses},${game.energizers},${calculateImpact(game).toFixed(2)}\n`;
+    });
+  });
+  downloadFile(csv, "impact_tracker.csv", "text/csv");
+}
+
+function exportJSON() {
+  const saved = { NUM_GAMES, players, data };
+  const json = JSON.stringify(saved, null, 2);
+  downloadFile(json, "impact_tracker.json", "application/json");
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const loaded = JSON.parse(e.target.result);
+    NUM_GAMES = loaded.NUM_GAMES;
+    players = loaded.players;
+    data = loaded.data;
+    document.getElementById('setup').classList.add('hidden');
+    document.getElementById('tracker').classList.remove('hidden');
+    renderTracker();
+  };
+  reader.readAsText(file);
+}
+
+function downloadFile(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
+</script>
+
+</body>
+</html>
