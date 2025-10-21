@@ -249,28 +249,33 @@ function renderTracker() {
       const oppInput = createTextInput(game.opponent, val => game.opponent = val);
       cells.push(wrapCell(oppInput));
 
+      const impactCell = document.createElement("td");
+      const ipmCell = document.createElement("td");
+
+      function updateRowImpact() {
+        const impact = calculateImpact(game);
+        const ipm = game.minutes ? (impact / game.minutes).toFixed(2) : "0.00";
+        impactCell.textContent = impact.toFixed(2);
+        ipmCell.textContent = ipm;
+        scheduleLeaderboardUpdate();
+      }
+
       ['minutes', 'points', 'assists', 'rebounds', 'steals', 'blocks', 'charges', 'tippedPasses', 'energizers']
         .forEach(stat => {
           const input = createNumberInput(game[stat], val => {
             game[stat] = parseFloat(val) || 0;
+            updateRowImpact();
           });
           cells.push(wrapCell(input));
         });
 
-      const impact = calculateImpact(game);
-      const ipm = game.minutes ? (impact / game.minutes).toFixed(2) : "0.00";
-
-      totalImpact += impact;
-      totalMinutes += game.minutes;
-
-      const impactCell = document.createElement("td");
-      impactCell.textContent = impact.toFixed(2);
-
-      const ipmCell = document.createElement("td");
-      ipmCell.textContent = ipm;
+      updateRowImpact();
 
       row.append(...cells, impactCell, ipmCell);
       table.appendChild(row);
+
+      totalImpact += calculateImpact(game);
+      totalMinutes += game.minutes;
     });
 
     const summary = document.createElement("p");
@@ -327,7 +332,6 @@ function createNumberInput(value, onChange) {
 
   input.addEventListener("input", () => {
     onChange(input.value);
-    scheduleLeaderboardUpdate();
   });
 
   return input;
@@ -340,7 +344,6 @@ function createTextInput(value, onChange) {
 
   input.addEventListener("input", () => {
     onChange(input.value);
-    scheduleLeaderboardUpdate();
   });
 
   return input;
@@ -426,6 +429,9 @@ function downloadFile(content, filename, mime) {
   link.click();
 }
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
