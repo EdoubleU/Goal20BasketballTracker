@@ -2,29 +2,121 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Basketball Impact Tracker</title>
+  <title>Goal 20: Basketball Impact Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    h2 { margin-top: 30px; }
-    label, input, select, button { margin: 5px 0; display: block; }
-    table { border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; }
-    input[type="number"] { width: 60px; }
-    .hidden { display: none; }
-    .controls { margin: 20px 0; }
-    .leaderboard-table { margin-bottom: 40px; }
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      margin: 0;
+    }
+
+    h1, h2 {
+      margin-top: 20px;
+      font-size: 1.5em;
+    }
+
+    label, input, select, button {
+      margin: 5px 0;
+      display: block;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    input[type="number"],
+    input[type="text"] {
+      padding: 8px;
+      font-size: 1em;
+      width: 100%;
+    }
+
+    button {
+      padding: 10px;
+      font-size: 1em;
+      width: 100%;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 20px 0;
+    }
+
+    .controls button,
+    .controls input[type="file"] {
+      flex: 1 1 45%;
+      min-width: 120px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .leaderboard-table {
+      margin-bottom: 40px;
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 800px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+      font-size: 0.9em;
+    }
+
+    @media (max-width: 768px) {
+      table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+
+      .controls {
+        flex-direction: column;
+      }
+
+      th, td {
+        padding: 6px;
+      }
+
+      h1 {
+        font-size: 1.25em;
+      }
+
+      h2 {
+        font-size: 1.1em;
+      }
+    }
   </style>
 </head>
 <body>
 
-<h1> Basketball Impact Tracker</h1>
+<h1>Goal 20: Basketball Impact Tracker</h1>
 
 <!-- Setup -->
 <div id="setup">
   <label>Number of Players: <input type="number" id="numPlayers" min="1" value="5"></label>
   <label>Number of Games: <input type="number" id="numGames" min="1" value="10"></label>
   <button onclick="generatePlayerInputs()">Next</button>
-
   <div id="playerInputs"></div>
   <button id="startBtn" class="hidden" onclick="startTracker()">Start Tracker</button>
 </div>
@@ -45,6 +137,7 @@
 let NUM_GAMES = 10;
 let players = [];
 let data = {};
+let renderTimeout;
 
 function generatePlayerInputs() {
   const num = parseInt(document.getElementById('numPlayers').value);
@@ -101,12 +194,11 @@ function renderTracker() {
   const tracker = document.getElementById("trackerContent");
   tracker.innerHTML = "";
 
-  // --- Leaderboard ---
+  // Leaderboard
   const leaderboard = document.createElement("div");
-  leaderboard.innerHTML = `<h2> Leaderboard (Impact per Minute)</h2>`;
+  leaderboard.innerHTML = `<h2>🏆 Leaderboard (Impact per Minute)</h2>`;
   const lbTable = document.createElement("table");
   lbTable.classList.add("leaderboard-table");
-
   lbTable.innerHTML = `
     <tr>
       <th>Rank</th>
@@ -116,34 +208,17 @@ function renderTracker() {
       <th>Impact/Min</th>
     </tr>
   `;
-
-  const ranked = players.map(name => {
-    const games = data[name].games;
-    const totalImpact = games.reduce((sum, g) => sum + calculateImpact(g), 0);
-    const totalMinutes = games.reduce((sum, g) => sum + (g.minutes || 0), 0);
-    const ipm = totalMinutes ? (totalImpact / totalMinutes).toFixed(2) : "0.00";
-    return { name, totalImpact, totalMinutes, ipm: parseFloat(ipm) };
-  }).sort((a, b) => b.ipm - a.ipm);
-
-  ranked.forEach((player, i) => {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</td>
-      <td>${player.name}</td>
-      <td>${player.totalImpact.toFixed(2)}</td>
-      <td>${player.totalMinutes}</td>
-      <td>${player.ipm.toFixed(2)}</td>
-    `;
-    lbTable.appendChild(row);
-  });
-
   leaderboard.appendChild(lbTable);
   tracker.appendChild(leaderboard);
+  renderLeaderboardOnly();
 
-  // --- Individual Player Sections ---
+  // Player Sections
   players.forEach(player => {
     const section = document.createElement("div");
     section.innerHTML = `<h2>${player}</h2>`;
+
+    const wrapper = document.createElement("div");
+    wrapper.classList.add("table-container");
 
     const table = document.createElement("table");
     const header = document.createElement("tr");
@@ -178,7 +253,6 @@ function renderTracker() {
         .forEach(stat => {
           const input = createNumberInput(game[stat], val => {
             game[stat] = parseFloat(val) || 0;
-            renderTracker();
           });
           cells.push(wrapCell(input));
         });
@@ -203,10 +277,79 @@ function renderTracker() {
     const perMinute = totalMinutes ? (totalImpact / totalMinutes).toFixed(2) : "0.00";
     summary.textContent = `Total Impact: ${totalImpact.toFixed(2)} | Minutes: ${totalMinutes} | Impact/Min: ${perMinute}`;
 
-    section.appendChild(table);
+    wrapper.appendChild(table);
+    section.appendChild(wrapper);
     section.appendChild(summary);
     tracker.appendChild(section);
   });
+}
+
+function renderLeaderboardOnly() {
+  const leaderboard = document.querySelector(".leaderboard-table");
+  if (!leaderboard) return;
+
+  while (leaderboard.rows.length > 1) {
+    leaderboard.deleteRow(1);
+  }
+
+  const ranked = players.map(name => {
+    const games = data[name].games;
+    const totalImpact = games.reduce((sum, g) => sum + calculateImpact(g), 0);
+    const totalMinutes = games.reduce((sum, g) => sum + (g.minutes || 0), 0);
+    const ipm = totalMinutes ? (totalImpact / totalMinutes).toFixed(2) : "0.00";
+    return { name, totalImpact, totalMinutes, ipm: parseFloat(ipm) };
+  }).sort((a, b) => b.ipm - a.ipm);
+
+  ranked.forEach((player, i) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${i + 1}</td>
+      <td>${player.name}</td>
+      <td>${player.totalImpact.toFixed(2)}</td>
+      <td>${player.totalMinutes}</td>
+      <td>${player.ipm.toFixed(2)}</td>
+    `;
+    leaderboard.appendChild(row);
+  });
+}
+
+function scheduleLeaderboardUpdate() {
+  clearTimeout(renderTimeout);
+  renderTimeout = setTimeout(() => {
+    renderLeaderboardOnly();
+  }, 500);
+}
+
+function createNumberInput(value, onChange) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.value = value;
+
+  input.addEventListener("input", () => {
+    onChange(input.value);
+    scheduleLeaderboardUpdate();
+  });
+
+  return input;
+}
+
+function createTextInput(value, onChange) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = value;
+
+  input.addEventListener("input", () => {
+    onChange(input.value);
+    scheduleLeaderboardUpdate();
+  });
+
+  return input;
+}
+
+function wrapCell(el) {
+  const td = document.createElement("td");
+  td.appendChild(el);
+  return td;
 }
 
 function calculateImpact(g) {
@@ -220,28 +363,6 @@ function calculateImpact(g) {
     g.tippedPasses * 0.5 +
     g.energizers * 2
   );
-}
-
-function createNumberInput(value, onChange) {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.value = value;
-  input.oninput = () => onChange(input.value);
-  return input;
-}
-
-function createTextInput(value, onChange) {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = value;
-  input.oninput = () => onChange(input.value);
-  return input;
-}
-
-function wrapCell(el) {
-  const td = document.createElement("td");
-  td.appendChild(el);
-  return td;
 }
 
 function saveToLocalStorage() {
