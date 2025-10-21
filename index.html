@@ -17,7 +17,7 @@
 </head>
 <body>
 
-<h1>🏀 Basketball Impact Tracker</h1>
+<h1> Basketball Impact Tracker</h1>
 
 <!-- Setup -->
 <div id="setup">
@@ -32,10 +32,10 @@
 <!-- Tracker -->
 <div id="tracker" class="hidden">
   <div class="controls">
-    <button onclick="saveToLocalStorage()">💾 Save</button>
-    <button onclick="loadFromLocalStorage()">📅 Load</button>
-    <button onclick="exportCSV()">📄 Export CSV</button>
-    <button onclick="exportJSON()">📄 Export JSON</button>
+    <button onclick="saveToLocalStorage()"> Save</button>
+    <button onclick="loadFromLocalStorage()"> Load</button>
+    <button onclick="exportCSV()"> Export CSV</button>
+    <button onclick="exportJSON()"> Export JSON</button>
     <input type="file" id="importJson" accept=".json" onchange="importJSON(event)">
   </div>
   <div id="trackerContent"></div>
@@ -103,7 +103,7 @@ function renderTracker() {
 
   // --- Leaderboard ---
   const leaderboard = document.createElement("div");
-  leaderboard.innerHTML = `<h2>🏆 Leaderboard (Impact per Minute)</h2>`;
+  leaderboard.innerHTML = `<h2> Leaderboard (Impact per Minute)</h2>`;
   const lbTable = document.createElement("table");
   lbTable.classList.add("leaderboard-table");
 
